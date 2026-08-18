@@ -1,0 +1,21 @@
+# 依赖与构建产物
+node_modules/
+package-lock.json
+
+# 本地临时/调试文件
+.build.log
+.tmp-client.cjs
+.edge-*
+.cdp-*
+*.ps1.bak
+.imginfo.ps1
+
+# 发布产物与打包暂存（zip 由用户按需构建，不入库）
+release/
+.release-staging/
+
+# 构建时生成的图库（base64 内嵌，体积大，不入库；由 build.mjs 重新生成）
+src/generated/
+
+# 原图备份（大体积 PNG），不入库；assets/*.jpg 为入库背景图
+assets/raw/

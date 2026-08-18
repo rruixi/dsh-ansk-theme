@@ -1,0 +1,29 @@
+{
+  "name": "@linxin666/dsh-client-ui-skin-ansk",
+  "version": "0.1.0",
+  "description": "爱祥 (Anon × Sakiko, BanG Dream! It's MyGO!!!!!) theme skin for dsh web GUI.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "license": "MIT",
+  "files": [
+    "lib",
+    "skin.json",
+    "cordis.patch.yml"
+  ]
+}

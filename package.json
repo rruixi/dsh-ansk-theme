@@ -1,0 +1,13 @@
+{
+  "name": "ansk-skin-src",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "爱祥 (Anon × Sakiko) DSH skin — source project. Build with: npm install && node build.mjs",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
