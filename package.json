@@ -1,11 +1,43 @@
 {
-  "name": "ansk-skin-src",
-  "version": "0.1.0",
-  "private": true,
+  "name": "ansk-skin",
+  "version": "0.2.1",
+  "description": "爱祥 (Anon × Sakiko, BanG Dream! It's MyGO!!!!!) 主题皮肤 — DSH Desktop 组合包：粉蓝撞色渐变、音符与星星装饰、标题栏/状态栏 chrome、背景图库与界面透明度设置页。",
   "type": "module",
-  "description": "爱祥 (Anon × Sakiko) DSH skin — source project. Build with: npm install && node build.mjs",
+  "license": "MIT",
+  "private": true,
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "build:bump": "node build.mjs --bump"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
