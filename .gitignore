@@ -1,10 +1,14 @@
-# 依赖与构建产物
+# 依赖
 node_modules/
 package-lock.json
+pnpm-lock.yaml
 
-# 本地临时/调试文件
-.build.log
+# 构建时生成的图库（base64 内嵌，体积大，不入库；由 build.mjs 重新生成）
+src/generated/
+
+# 临时/调试文件
 .tmp-client.cjs
+.build.log
 .edge-*
 .cdp-*
 *.ps1.bak
@@ -14,8 +18,12 @@ package-lock.json
 release/
 .release-staging/
 
-# 构建时生成的图库（base64 内嵌，体积大，不入库；由 build.mjs 重新生成）
-src/generated/
+# 旧布局遗留（历史版本的组装皮肤包目录，新格式不再使用）
+/dist/
+
+# 外置卷（exFAT）自动生成的苹果元数据
+._*
+**/._*
 
 # 原图备份（大体积 PNG），不入库；assets/*.jpg 为入库背景图
 assets/raw/

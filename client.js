@@ -1,9 +1,10 @@
 window.__ModuleLoader__.load({
-	id: "@linxin666/dsh-client-ui-skin-ansk",
+	id: "ansk-skin",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -29,8 +30,49 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // src/skin.css.js
 var SKIN_CSS = [
-  // ---------- 全局底色：粉蓝撞色渐变（亮）。背景插画在独立图层 .anskBg
+  // ---------- 文档根 + 全局底色：粉蓝撞色渐变（亮）。背景插画在独立图层 .anskBg
   // （z-index:-1），经 CSS 变量控制位置/大小/图源，设置面板可调。 ----------
+  // 皮肤 chrome 尺寸集中在这里（挂在 html 上），避免各处散落魔数：
+  //   --ansk-titlebar-h  标题栏高度（macOS 用 36px，让文字与红黄绿灯同一水平线）
+  //   --ansk-statusbar-h 状态栏高度
+  //   --ansk-chrome-h    两者之和（#root 算高度用）
+  //   --ansk-tl-pad      标题栏左侧留白（macOS 必须让开红黄绿灯，约 78px）
+  // 这些变量必须挂在 html 上并排在平台覆盖之前：body[data-dsh-ansk]{…} 与
+  // html[data-platform='darwin'][data-dsh-ansk]{…} 同为 (0,2,0)，先出现者会被后者按
+  // 源码顺序覆盖；若把默认值留在 body 块里（它排在文件后面），darwin 覆盖会被反向吃掉。
+  "html[data-dsh-ansk]{",
+  "--ansk-titlebar-h:30px;",
+  "--ansk-statusbar-h:24px;",
+  "--ansk-chrome-h:54px;",
+  "--ansk-tl-pad:6px;",
+  "background:transparent;",
+  "}",
+  // 给固定标题栏/状态栏让位（标题栏在上、状态栏在下）。
+  "html[data-dsh-ansk] body{",
+  "padding:var(--ansk-chrome-top,30px) 0 var(--ansk-statusbar-h) !important;",
+  "}",
+  // ---------- macOS（Electron 原生窗口）适配 ----------
+  // 红黄绿灯是系统绘制的窗口按钮，固定在窗口左上角：标题栏内容必须整体右移让开，
+  // 装饰用的「— □ ×」也要撤掉（真按钮就在旁边，再画三个假的是双重窗口按钮）。
+  "html[data-platform='darwin'][data-dsh-ansk]{",
+  "--ansk-chrome-top:36px;",
+  "--ansk-titlebar-h:36px;",
+  "--ansk-chrome-h:60px;",
+  "--ansk-tl-pad:78px;",
+  "}",
+  "html[data-platform='darwin'][data-dsh-ansk] .anskTitlebarBtn{",
+  "display:none;",
+  "}",
+  // 全屏（无红黄绿灯）时标题栏回到 30px、装饰按钮放回来、左侧留白收窄。
+  "html[data-platform='darwin'][data-fullscreen][data-dsh-ansk]{",
+  "--ansk-chrome-top:30px;",
+  "--ansk-titlebar-h:30px;",
+  "--ansk-chrome-h:54px;",
+  "--ansk-tl-pad:6px;",
+  "}",
+  "html[data-platform='darwin'][data-fullscreen][data-dsh-ansk] .anskTitlebarBtn{",
+  "display:inline-flex;",
+  "}",
   "body[data-dsh-ansk]{",
   "--ansk-pink:#ff9ec7;",
   "--ansk-pink-soft:#ffd3e4;",
@@ -46,7 +88,7 @@ var SKIN_CSS = [
   "radial-gradient(120% 90% at 10% 110%,rgba(111,168,255,0.5) 0%,rgba(111,168,255,0) 55%),",
   "linear-gradient(160deg,#ffeef5 0%,#f6f1ff 45%,#eaf2ff 100%);",
   "background-attachment:fixed;",
-  "padding:30px 10px 26px;",
+  "padding:var(--ansk-chrome-top,30px) 10px var(--ansk-statusbar-h);",
   "}",
   // ---------- 全局底色（暗） ----------
   "body[data-dsh-ansk][data-ds-dark-theme]{",
@@ -81,14 +123,22 @@ var SKIN_CSS = [
   "}",
   // ---------- 对话主区：半透明卡片（不使用 backdrop-filter：它会把 fixed 后代
   // （设置面板/弹层）的包含块从视口拽到卡片上，导致全视口面板错位） ----------
-  "body[data-dsh-ansk] [id=root]{",
+  // 现版基线：#root{height:100%;margin:0}，AppFrame 铺满视口；皮肤把它收成一条卡片，
+  // 上下留出固定标题栏/状态栏的高度。
+  // 坑：必须写 `#root`（真 ID 选择器），不能写 `[id=root]`——后者是【属性选择器】，
+  // 特异性只有 (0,2,1)，会被框架基线的 `#root`(1,0,0) 按特异性压掉，height 根本不生效
+  // （症状：卡片只有内容高度、底部与状态栏错位）。
+  "body[data-dsh-ansk] #root{",
   "box-sizing:border-box;",
+  "height:calc(100vh - var(--ansk-chrome-h));",
+  "margin:0 10px; /* \u7AD6\u76F4\u65B9\u5411\u4E0D\u52A0\u5916\u8FB9\u8DDD\uFF1A\u5361\u7247\u5E95\u8FB9\u5FC5\u987B\u6B63\u597D\u843D\u5728\u72B6\u6001\u680F\u9876\u8FB9 */",
   "background:rgba(255,255,255,var(--ansk-op-card,0.42));",
   "border:1px solid rgba(111,168,255,0.45);",
   "border-radius:14px;",
   "box-shadow:0 10px 34px rgba(63,125,242,0.18);",
+  "overflow:hidden;",
   "}",
-  "body[data-dsh-ansk][data-ds-dark-theme] [id=root]{",
+  "body[data-dsh-ansk][data-ds-dark-theme] #root{",
   "background:rgba(20,26,43,var(--ansk-op-card,0.48));",
   "border-color:rgba(111,168,255,0.35);",
   "box-shadow:0 10px 34px rgba(0,0,0,0.45);",
@@ -96,9 +146,11 @@ var SKIN_CSS = [
   // ---------- 标题栏 ----------
   "body[data-dsh-ansk] .anskTitlebar{",
   "position:fixed;top:0;left:0;right:0;z-index:1000000;",
-  "height:30px;display:flex;align-items:center;gap:6px;padding:0 6px;",
+  "box-sizing:border-box;",
+  "height:var(--ansk-titlebar-h);display:flex;align-items:center;gap:6px;",
+  "padding:0 8px 0 var(--ansk-tl-pad);",
   "color:#fff;user-select:none;",
-  "font:700 12px/30px 'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;",
+  "font:700 12px/var(--ansk-titlebar-h) 'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;",
   "background:linear-gradient(90deg,#ff9ec7 0%,#ffb6d8 40%,#8fb3ff 85%,#6fa8ff 100%);",
   "border-bottom:1px solid rgba(63,125,242,0.55);",
   "box-shadow:inset 0 1px rgba(255,255,255,0.5),0 2px 10px rgba(63,125,242,0.22);",
@@ -124,9 +176,10 @@ var SKIN_CSS = [
   // ---------- 状态栏 ----------
   "body[data-dsh-ansk] .anskStatusbar{",
   "position:fixed;bottom:0;left:0;right:0;z-index:1000000;",
-  "height:24px;display:flex;align-items:stretch;",
+  "box-sizing:border-box;",
+  "height:var(--ansk-statusbar-h);display:flex;align-items:stretch;",
   "color:#5a6a94;user-select:none;",
-  "font:11px/24px 'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;",
+  "font:11px/var(--ansk-statusbar-h) 'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;",
   "background:rgba(255,255,255,0.72);border-top:1px solid rgba(111,168,255,0.4);",
   "backdrop-filter:blur(10px);",
   "-webkit-backdrop-filter:blur(10px);",
@@ -148,7 +201,7 @@ var SKIN_CSS = [
   // ---------- 细节 ----------
   "body[data-dsh-ansk] ::selection{background:#ff9ec7;color:#fff;}",
   "body[data-dsh-ansk][data-ds-dark-theme] ::selection{background:#6fa8ff;color:#fff;}",
-  "body[data-dsh-ansk] .anskTitlebarBtn:focus-visible,body[data-dsh-ansk] [data-skin-chrome='titlebar']:focus-visible{outline:none;box-shadow:inset 0 0 0 2px #fff;}",
+  "body[data-dsh-ansk] .anskTitlebarBtn:focus-visible,body[data-dsh-ansk] [data-dsh-skin-chrome='titlebar']:focus-visible{outline:none;box-shadow:inset 0 0 0 2px #fff;}",
   "@media (prefers-reduced-motion:reduce){body[data-dsh-ansk] *{transition:none!important;}}",
   "body[data-dsh-ansk] .anskTitlebarBtn{transition:background .12s,box-shadow .12s;}",
   // ---------- 侧边栏列：粉蓝氛围渐变（不使用 backdrop-filter：设置面板是
@@ -259,19 +312,19 @@ var SKIN_CSS = [
   // ---------- footer 设置触发器 ----------
   "body[data-dsh-ansk] [class$='_sidebarCol'] [class$='_trigger']:hover{background:rgba(255,158,199,0.14);}",
   // ---------- 细节面板：半透明 + 粉蓝边框（同上，不用 backdrop-filter） ----------
-  "body[data-dsh-ansk] [class$='_detailsCol']{",
+  "body[data-dsh-ansk] [class$='_rightbarCol']{",
   "background:rgba(255,255,255,var(--ansk-op-details,0.55));",
   "border-left:1px solid rgba(111,168,255,0.35);",
   "}",
-  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_detailsCol']{",
+  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_rightbarCol']{",
   "background:rgba(20,26,43,var(--ansk-op-details,0.5));",
   "border-left-color:rgba(111,168,255,0.2);",
   "}",
-  "body[data-dsh-ansk] [class$='_detailsCol'] [class$='_header']{",
+  "body[data-dsh-ansk] [class$='_rightbarCol'] [class$='_header']{",
   "background:linear-gradient(90deg,rgba(255,158,199,0.16),rgba(111,168,255,0.16));",
   "border-bottom:1px solid rgba(111,168,255,0.3);",
   "}",
-  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_detailsCol'] [class$='_header']{",
+  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_rightbarCol'] [class$='_header']{",
   "background:linear-gradient(90deg,rgba(255,158,199,0.1),rgba(111,168,255,0.1));",
   "border-bottom-color:rgba(111,168,255,0.2);",
   "}",
@@ -300,15 +353,15 @@ var SKIN_CSS = [
   "body[data-dsh-ansk][data-ds-dark-theme] [class$='_sidebarCol'] [class$='_root']{",
   "background:rgba(20,26,43,var(--ansk-op-sidebar,0.42));",
   "}",
-  "body[data-dsh-ansk] [class$='_detailsCol'] [class$='_root']{",
+  "body[data-dsh-ansk] [class$='_rightbarCol'] [class$='_root']{",
   "background:rgba(255,255,255,var(--ansk-op-details,0.4));",
   "}",
-  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_detailsCol'] [class$='_root']{",
+  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_rightbarCol'] [class$='_root']{",
   "background:rgba(20,26,43,var(--ansk-op-details,0.5));",
   "}",
   ""
 ].join("\n");
-var CSS_TAG = "@linxin666/dsh-client-ui-skin-ansk/ansk.module.css";
+var CSS_TAG = "ansk-skin/ansk.module.css";
 
 // src/art.js
 var NOTE_SVG = [
@@ -543,7 +596,7 @@ function idbOpen() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(IDB_NAME, 1);
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(IDB_STORE);
+      if (!req.result.objectStoreNames.contains(IDB_STORE)) req.result.createObjectStore(IDB_STORE);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -762,9 +815,10 @@ function createBgLayer() {
 
 // src/settings-ui.js
 var import_react = __toESM(require("react"), 1);
+var SECTION_ORDER = 500;
 var ROW = { margin: "10px 0" };
 var LABEL = { display: "block", fontWeight: 600, marginBottom: 4, fontSize: 13 };
-var HINT = { display: "block", color: "#8891a7", fontSize: 12, marginTop: 4 };
+var HINT = { display: "block", color: "var(--dsw-alias-label-secondary)", fontSize: 12, marginTop: 4 };
 var RANGE = { width: "100%", accentColor: "#ff9ec7" };
 var BTN = {
   background: "linear-gradient(135deg,#ff9ec7 0%,#8fb3ff 100%)",
@@ -778,33 +832,78 @@ var BTN = {
 };
 var BTN2 = {
   background: "transparent",
-  color: "#8891a7",
-  border: "1px solid #c3cbe0",
+  color: "var(--dsw-alias-label-secondary)",
+  border: "1px solid var(--dsw-alias-border-l2)",
   borderRadius: 8,
   padding: "6px 14px",
   cursor: "pointer"
 };
-function BgSettings({ layer }) {
+var DIVIDER = { borderTop: "1px solid var(--dsw-alias-border-l1)", paddingTop: 12, marginTop: 14 };
+var NOTICE = { padding: "8px 10px", borderRadius: 8, fontSize: 12, margin: "6px 0", fontWeight: 600 };
+var THUMB = {
+  width: 84,
+  height: 56,
+  objectFit: "cover",
+  borderRadius: 6,
+  display: "block",
+  border: "2px solid transparent",
+  background: "var(--dsw-alias-bg-layer-2)"
+};
+var THUMB_ACTIVE = { border: "2px solid #ff9ec7", boxShadow: "0 0 0 2px rgba(255,158,199,0.25)" };
+var TILE = { display: "inline-block", margin: "0 8px 8px 0", textAlign: "center", cursor: "pointer", position: "relative", verticalAlign: "top" };
+var TILE_NAME = {
+  display: "block",
+  fontSize: 11,
+  color: "var(--dsw-alias-label-secondary)",
+  maxWidth: 84,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  marginTop: 3,
+  cursor: "pointer"
+};
+var DEL_BTN = {
+  position: "absolute",
+  top: -6,
+  right: -6,
+  width: 18,
+  height: 18,
+  borderRadius: "50%",
+  background: "#d33",
+  color: "#fff",
+  border: "none",
+  cursor: "pointer",
+  fontSize: 12,
+  lineHeight: "16px",
+  padding: 0
+};
+var MINI = {
+  width: 20,
+  height: 18,
+  fontSize: 10,
+  lineHeight: "14px",
+  padding: 0,
+  borderRadius: 4,
+  border: "1px solid var(--dsw-alias-border-l2)",
+  background: "transparent",
+  color: "var(--dsw-alias-label-secondary)",
+  cursor: "pointer",
+  margin: "2px 2px 0 0"
+};
+var MINI_DISABLED = { opacity: 0.35, cursor: "default" };
+function BgSettings({ layer, t }) {
   const init = layer.getState();
-  const [pos, setPos] = (0, import_react.useState)(init.pos);
-  const [size, setSize] = (0, import_react.useState)(init.size);
-  const [pick, setPick] = (0, import_react.useState)(init.pick);
-  const [ops, setOps] = (0, import_react.useState)(Object.assign({}, init.ops));
-  const [uploads, setUploads] = (0, import_react.useState)(init.uploads || []);
-  const [error, setError] = (0, import_react.useState)(null);
-  const [okMsg, setOkMsg] = (0, import_react.useState)(null);
-  const [editingId, setEditingId] = (0, import_react.useState)(null);
-  const [editName, setEditName] = (0, import_react.useState)("");
+  const [pos, setPos] = import_react.default.useState(init.pos);
+  const [size, setSize] = import_react.default.useState(init.size);
+  const [pick, setPick] = import_react.default.useState(init.pick);
+  const [ops, setOps] = import_react.default.useState(Object.assign({}, init.ops));
+  const [uploads, setUploads] = import_react.default.useState(init.uploads || []);
+  const [error, setError] = import_react.default.useState(null);
+  const [okMsg, setOkMsg] = import_react.default.useState(null);
+  const [editingId, setEditingId] = import_react.default.useState(null);
+  const [editName, setEditName] = import_react.default.useState("");
   const images = init.images || [];
-  const opEntries = Object.keys(init.ops || {}).map((key) => [key, key]);
-  const NOTICE = { padding: "8px 10px", borderRadius: 8, fontSize: 12, margin: "6px 0", fontWeight: 600 };
-  const THUMB = { width: 84, height: 56, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid transparent", background: "#eef0f7" };
-  const THUMB_ACTIVE = { border: "2px solid #ff9ec7", boxShadow: "0 0 0 2px rgba(255,158,199,0.25)" };
-  const TILE = { display: "inline-block", margin: "0 8px 8px 0", textAlign: "center", cursor: "pointer", position: "relative", verticalAlign: "top" };
-  const TILE_NAME = { display: "block", fontSize: 11, color: "#4a5a86", maxWidth: 84, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 3, cursor: "pointer" };
-  const DEL_BTN = { position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "#d33", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, lineHeight: "16px", padding: 0 };
-  const MINI = { width: 20, height: 18, fontSize: 10, lineHeight: "14px", padding: 0, borderRadius: 4, border: "1px solid #c3cbe0", background: "transparent", color: "#5a6a94", cursor: "pointer", margin: "2px 2px 0 0" };
-  const MINI_DISABLED = { opacity: 0.35, cursor: "default" };
+  const opKeys = Object.keys(init.ops || {});
   const refreshFromLayer = () => {
     const s = layer.getState();
     setPos(s.pos);
@@ -844,7 +943,7 @@ function BgSettings({ layer }) {
     }),
     isUpload ? import_react.default.createElement("button", {
       style: DEL_BTN,
-      title: "\u5220\u9664",
+      title: "\xD7",
       onClick: (e) => {
         e.stopPropagation();
         layer.removeUpload(item.id).then(refreshFromLayer);
@@ -878,7 +977,7 @@ function BgSettings({ layer }) {
       import_react.default.createElement("button", {
         style: Object.assign({}, MINI, index === 0 ? MINI_DISABLED : {}),
         disabled: index === 0,
-        title: "\u524D\u79FB",
+        title: "\u25C0",
         onClick: (e) => {
           e.stopPropagation();
           move("up", item.id);
@@ -887,7 +986,7 @@ function BgSettings({ layer }) {
       import_react.default.createElement("button", {
         style: Object.assign({}, MINI, index === total - 1 ? MINI_DISABLED : {}),
         disabled: index === total - 1,
-        title: "\u540E\u79FB",
+        title: "\u25B6",
         onClick: (e) => {
           e.stopPropagation();
           move("down", item.id);
@@ -899,12 +998,16 @@ function BgSettings({ layer }) {
     "div",
     null,
     // 操作反馈
-    error ? import_react.default.createElement("div", { style: Object.assign({}, NOTICE, { background: "#fdecec", color: "#d33" }) }, "\u26A0 " + error) : null,
-    okMsg ? import_react.default.createElement("div", { style: Object.assign({}, NOTICE, { background: "#eaf7ee", color: "#2e7d46" }) }, "\u2713 " + okMsg) : null,
+    error ? import_react.default.createElement("div", {
+      style: Object.assign({}, NOTICE, { background: "var(--dsw-alias-state-error-primary)", color: "#fff" })
+    }, "\u26A0 " + error) : null,
+    okMsg ? import_react.default.createElement("div", {
+      style: Object.assign({}, NOTICE, { background: "var(--dsw-alias-state-success-primary)", color: "#fff" })
+    }, "\u2713 " + okMsg) : null,
     import_react.default.createElement(
       "div",
       { style: ROW },
-      import_react.default.createElement("label", { style: LABEL }, "\u80CC\u666F\u56FE\u4F4D\u7F6E"),
+      import_react.default.createElement("label", { style: LABEL }, t("bg.pos")),
       import_react.default.createElement("input", {
         type: "range",
         min: 0,
@@ -918,12 +1021,12 @@ function BgSettings({ layer }) {
           layer.setPos(v);
         }
       }),
-      import_react.default.createElement("span", { style: HINT }, "\u5F53\u524D " + pos + "%\uFF0850% = \u5C45\u4E2D\uFF0C\u8D8A\u5C0F\u8D8A\u9760\u4E0A\uFF09")
+      import_react.default.createElement("span", { style: HINT }, t("bg.pos.hint", { v: pos }))
     ),
     import_react.default.createElement(
       "div",
       { style: ROW },
-      import_react.default.createElement("label", { style: LABEL }, "\u80CC\u666F\u56FE\u5927\u5C0F"),
+      import_react.default.createElement("label", { style: LABEL }, t("bg.size")),
       import_react.default.createElement("input", {
         type: "range",
         min: 100,
@@ -937,21 +1040,21 @@ function BgSettings({ layer }) {
           layer.setSize(v);
         }
       }),
-      import_react.default.createElement("span", { style: HINT }, "\u5F53\u524D " + size + "%\uFF08100% = \u94FA\u6EE1\u5BBD\u5EA6\uFF0C\u8D8A\u5927\u8D8A\u653E\u5927\uFF09")
+      import_react.default.createElement("span", { style: HINT }, t("bg.size.hint", { v: size }))
     ),
-    // 背景图库：上传图（可预览/选择/删除）+ 内置图（assets 内嵌）
+    // 背景图库：上传图（可预览/选择/删除）+ 内置图（构建期内嵌）
     import_react.default.createElement(
       "div",
-      { style: Object.assign({}, ROW, { borderTop: "1px solid #e3e8f4", paddingTop: 12, marginTop: 14 }) },
-      import_react.default.createElement("label", { style: LABEL }, "\u80CC\u666F\u56FE\u5E93"),
-      import_react.default.createElement("span", { style: HINT }, "\u70B9\u51FB\u7F29\u7565\u56FE\u5E94\u7528\uFF1B\u4E0A\u4F20\u7684\u56FE\u5B58\u4E8E\u672C\u673A\u6D4F\u89C8\u5668\uFF0C\u53EF\u968F\u65F6\u5220\u9664"),
+      { style: Object.assign({}, ROW, DIVIDER) },
+      import_react.default.createElement("label", { style: LABEL }, t("gallery")),
+      import_react.default.createElement("span", { style: HINT }, t("gallery.hint")),
       import_react.default.createElement(
         "div",
         null,
         import_react.default.createElement(
           "label",
           { style: Object.assign({}, BTN, { display: "inline-block", marginBottom: 8 }) },
-          "\u4E0A\u4F20\u65B0\u56FE",
+          t("upload"),
           import_react.default.createElement("input", {
             type: "file",
             accept: "image/*",
@@ -962,18 +1065,21 @@ function BgSettings({ layer }) {
               setError(null);
               setOkMsg(null);
               layer.upload(f).then(() => {
-                setOkMsg("\u5DF2\u6DFB\u52A0\u5E76\u5E94\u7528\u8BE5\u80CC\u666F\u56FE");
+                setOkMsg(t("ok.uploaded"));
                 refreshFromLayer();
               }).catch((err) => {
-                setError(err && err.message ? err.message : "\u4E0A\u4F20\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\uFF08JPG/PNG/WebP \u683C\u5F0F\uFF09");
+                setError(err && err.message ? err.message : t("err.upload"));
               });
               e.target.value = "";
             }
           })
         ),
-        import_react.default.createElement("button", { style: Object.assign({}, BTN2, { marginBottom: 8 }), onClick: () => {
-          layer.reset().then(refreshFromLayer);
-        } }, "\u6062\u590D\u9ED8\u8BA4")
+        import_react.default.createElement("button", {
+          style: Object.assign({}, BTN2, { marginBottom: 8 }),
+          onClick: () => {
+            layer.reset().then(refreshFromLayer);
+          }
+        }, t("reset"))
       ),
       // 上传图（带删除/排序/重命名）
       uploads.length > 0 ? import_react.default.createElement(
@@ -981,7 +1087,7 @@ function BgSettings({ layer }) {
         { style: { marginTop: 4 } },
         uploads.map((u, idx) => tile(u, true, idx, uploads.length))
       ) : null,
-      // 内置图（assets 内嵌）
+      // 内置图（构建期内嵌）
       import_react.default.createElement(
         "div",
         { style: { marginTop: uploads.length > 0 ? 6 : 2 } },
@@ -991,20 +1097,17 @@ function BgSettings({ layer }) {
     // 各界面透明度（百分比滑块，实时生效 + localStorage 持久化）
     import_react.default.createElement(
       "div",
-      { style: Object.assign({}, ROW, { borderTop: "1px solid #e3e8f4", paddingTop: 12, marginTop: 14 }) },
-      import_react.default.createElement("label", { style: LABEL }, "\u754C\u9762\u900F\u660E\u5EA6"),
-      import_react.default.createElement("span", { style: HINT }, "\u503C\u8D8A\u5927\u8D8A\u4E0D\u900F\u660E\uFF1B0 = \u5B8C\u5168\u900F\u660E\uFF08\u900F\u51FA\u80CC\u666F\u56FE\uFF09"),
-      opEntries.map(([key]) => {
-        const label = OP_LABEL(key);
+      { style: Object.assign({}, ROW, DIVIDER) },
+      import_react.default.createElement("label", { style: LABEL }, t("opacity")),
+      import_react.default.createElement("span", { style: HINT }, t("opacity.hint")),
+      opKeys.map((key) => {
         const v = Math.round((ops[key] ?? 0) * 100);
         return import_react.default.createElement(
           "div",
           { key, style: { margin: "8px 0" } },
-          import_react.default.createElement(
-            "span",
-            { style: { display: "block", fontSize: 12, color: "#4a5a86", marginBottom: 2 } },
-            label + "\uFF1A" + v + "%"
-          ),
+          import_react.default.createElement("span", {
+            style: { display: "block", fontSize: 12, color: "var(--dsw-alias-label-secondary)", marginBottom: 2 }
+          }, t(OP_LABEL_KEY(key)) + "\uFF1A" + v + "%"),
           import_react.default.createElement("input", {
             type: "range",
             min: 0,
@@ -1027,67 +1130,103 @@ function BgSettings({ layer }) {
     )
   );
 }
-var OP_LABEL_MAP = { card: "\u5BF9\u8BDD\u4E3B\u5361\u7247", sidebar: "\u4FA7\u8FB9\u680F", details: "\u7EC6\u8282\u9762\u677F", center: "\u5BF9\u8BDD\u5185\u5BB9\u533A", scrim: "\u80CC\u666F\u56FE\u906E\u7F69" };
-function OP_LABEL(key) {
+var OP_LABEL_MAP = { card: "op.card", sidebar: "op.sidebar", details: "op.rightbar", center: "op.center", scrim: "op.scrim" };
+function OP_LABEL_KEY(key) {
   return OP_LABEL_MAP[key] || key;
 }
-function registerSettings(ctx, layer) {
-  let dispose = null;
-  let timer = null;
-  const tryRegister = () => {
-    let slots;
-    try {
-      slots = typeof ctx.get === "function" ? ctx.get("slots") : void 0;
-    } catch {
-      slots = void 0;
-    }
-    if (!slots || typeof slots.inject !== "function") return false;
-    const disposers = [];
-    slots.inject("settings.section", () => {
-      const d = slots.register(
-        { name: "settings.section", id: "ansk-bg", order: 500, label: () => "\u7231\u7965\u80CC\u666F" },
-        () => import_react.default.createElement(BgSettings, { layer })
-      );
-      if (typeof d === "function") disposers.push(d);
-      return d;
-    });
-    dispose = () => {
-      for (const d of disposers) {
-        try {
-          d();
-        } catch {
-        }
-      }
+function registerSettings(ctx, layer, t) {
+  const slots = ctx.slots;
+  if (!slots || typeof slots.inject !== "function" || typeof slots.register !== "function") {
+    ctx.effect(() => () => {
+    }, "ui-skin-ansk: settings unavailable");
+    return () => {
     };
-    return true;
-  };
-  if (typeof ctx.get === "function" && !tryRegister()) {
-    let tries = 0;
-    timer = setInterval(() => {
-      tries++;
-      if (tryRegister() || tries >= 75) {
-        clearInterval(timer);
-        timer = null;
-      }
-    }, 200);
   }
+  const disposers = [];
+  const disposeInjection = slots.inject("settings.section", () => {
+    const d = slots.register(
+      {
+        name: "settings.section",
+        id: "ansk-bg",
+        order: SECTION_ORDER,
+        label: () => t("nav"),
+        locale: "ansk"
+      },
+      () => import_react.default.createElement(BgSettings, { layer, t })
+    );
+    if (typeof d === "function") disposers.push(d);
+    return d;
+  });
+  if (typeof disposeInjection === "function") disposers.push(disposeInjection);
   return () => {
-    if (timer !== null) clearInterval(timer);
-    if (dispose !== null) dispose();
+    for (const d of disposers) {
+      try {
+        d();
+      } catch {
+      }
+    }
+    disposers.length = 0;
   };
 }
 
 // src/client/index.js
-var SKIN_TITLE = "\u7231\u7965 \xB7 DeepSeek \u5728\u7EBF";
+var SKIN_TITLE = "\u7231\u7965 \xB7 DeepSeek Harness";
 var STATUS_CELLS = ["ANSK 01", "\u5409\u4ED6 \xD7 \u94A2\u7434", "\u5DF2\u8FDE\u63A5", "\u5728\u7EBF"];
 var TITLEBAR_GLYPHS = ["\u2014", "\u25A1", "\xD7"];
+var inject = ["slots", "locale"];
+var SETTINGS_NS = "ansk";
+var DICT = {
+  zh: {
+    "nav": "\u7231\u7965\u80CC\u666F",
+    "bg.pos": "\u80CC\u666F\u56FE\u4F4D\u7F6E",
+    "bg.pos.hint": "\u5F53\u524D {v}%\uFF0850% = \u5C45\u4E2D\uFF0C\u8D8A\u5C0F\u8D8A\u9760\u4E0A\uFF09",
+    "bg.size": "\u80CC\u666F\u56FE\u5927\u5C0F",
+    "bg.size.hint": "\u5F53\u524D {v}%\uFF08100% = \u94FA\u6EE1\u5BBD\u5EA6\uFF0C\u8D8A\u5927\u8D8A\u653E\u5927\uFF09",
+    "gallery": "\u80CC\u666F\u56FE\u5E93",
+    "gallery.hint": "\u70B9\u51FB\u7F29\u7565\u56FE\u5E94\u7528\uFF1B\u4E0A\u4F20\u7684\u56FE\u5B58\u4E8E\u672C\u673A\u6D4F\u89C8\u5668\uFF0C\u53EF\u968F\u65F6\u5220\u9664",
+    "upload": "\u4E0A\u4F20\u65B0\u56FE",
+    "reset": "\u6062\u590D\u9ED8\u8BA4",
+    "opacity": "\u754C\u9762\u900F\u660E\u5EA6",
+    "opacity.hint": "\u503C\u8D8A\u5927\u8D8A\u4E0D\u900F\u660E\uFF1B0 = \u5B8C\u5168\u900F\u660E\uFF08\u900F\u51FA\u80CC\u666F\u56FE\uFF09",
+    "ok.uploaded": "\u5DF2\u6DFB\u52A0\u5E76\u5E94\u7528\u8BE5\u80CC\u666F\u56FE",
+    "err.upload": "\u4E0A\u4F20\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\uFF08JPG/PNG/WebP \u683C\u5F0F\uFF09",
+    "op.card": "\u5BF9\u8BDD\u4E3B\u5361\u7247",
+    "op.sidebar": "\u4FA7\u8FB9\u680F",
+    "op.rightbar": "\u7EC6\u8282\u9762\u677F",
+    "op.center": "\u5BF9\u8BDD\u5185\u5BB9\u533A",
+    "op.scrim": "\u80CC\u666F\u56FE\u906E\u7F69"
+  },
+  en: {
+    "nav": "Anon \xD7 Sakiko",
+    "bg.pos": "Background position",
+    "bg.pos.hint": "Now {v}% (50% = centered, smaller = higher)",
+    "bg.size": "Background size",
+    "bg.size.hint": "Now {v}% (100% = full width, larger = zoomed)",
+    "gallery": "Background gallery",
+    "gallery.hint": "Click a thumbnail to apply; uploads stay in this browser and can be deleted anytime",
+    "upload": "Upload image",
+    "reset": "Reset to defaults",
+    "opacity": "Panel opacity",
+    "opacity.hint": "Higher = more opaque; 0 = fully transparent (background shows through)",
+    "ok.uploaded": "Background added and applied",
+    "err.upload": "Upload failed, please retry (JPG/PNG/WebP)",
+    "op.card": "Conversation card",
+    "op.sidebar": "Sidebar",
+    "op.rightbar": "Details panel",
+    "op.center": "Conversation area",
+    "op.scrim": "Background scrim"
+  }
+};
 function injectCss() {
-  if (document.querySelector(`style[data-plugin-css="${CSS_TAG}"]`) !== null) return;
+  const existing = document.querySelector(`style[data-plugin-css="${CSS_TAG}"]`);
+  if (existing !== null) return () => {
+  };
   const tag = document.createElement("style");
-  tag.dataset.plugin = "@linxin666/dsh-client-ui-skin-ansk";
+  tag.dataset.plugin = "ansk-skin";
   tag.dataset.pluginCss = CSS_TAG;
   tag.textContent = SKIN_CSS;
   document.head.appendChild(tag);
+  return () => tag.remove();
 }
 function apply(ctx) {
   const body = document.body;
@@ -1096,8 +1235,12 @@ function apply(ctx) {
     }, "ui-skin-ansk: already-mounted noop");
     return;
   }
-  injectCss();
+  const removeCss = injectCss();
   body.dataset.dshAnsk = "";
+  const root = document.documentElement;
+  root.dataset.dshAnsk = "";
+  ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh: DICT.zh, en: DICT.en }), "ui-skin-ansk: locale");
+  const t = ctx.locale.bind(SETTINGS_NS);
   const disposeChrome = buildChrome({
     title: SKIN_TITLE,
     cells: STATUS_CELLS,
@@ -1105,16 +1248,19 @@ function apply(ctx) {
   });
   const disposeBranding = startBranding();
   const bgLayer = createBgLayer();
-  const disposeSettings = registerSettings(ctx, bgLayer);
+  const disposeSettings = registerSettings(ctx, bgLayer, t);
   ctx.effect(() => () => {
+    disposeSettings();
     disposeChrome();
     disposeBranding();
     bgLayer.dispose();
-    if (disposeSettings) disposeSettings();
+    removeCss();
     delete body.dataset.dshAnsk;
+    delete root.dataset.dshAnsk;
   }, "ui-skin-ansk: chrome");
 }
-module.exports = { apply };
+module.exports = { apply, inject };
+
 		return module.exports;
 	}
 });

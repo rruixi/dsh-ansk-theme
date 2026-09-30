@@ -1,13 +1,23 @@
-// 爱祥 — 设置面板「爱祥背景」区块：位置滑块 / 大小滑块 / 上传背景图 / 恢复默认。
-// 注册到 DSH 官方设置面板的 settings.section 槽。
-// slots 服务经 ctx.get('slots') 可选读取（不依赖 manifest inject——宿主对包元数据有
-// 跨重启缓存，inject 声明可能滞后；ctx.get 方案对 try-on miniCtx 也天然安全）。
+// 爱祥 — 设置面板「爱祥背景」页：位置/大小滑块、背景图库（上传/选择/排序/重命名/删除）、
+// 各界面透明度滑块、恢复默认。
+//
+// 注册方式遵循 DSH Desktop 当前契约（与官方 ui-theme / ui-settings-general 一致）：
+//   1) client 模块导出 inject = ['slots', 'locale']，因此 apply 时可直接用 ctx.slots / ctx.locale；
+//   2) ctx.slots.inject('settings.section', () => ctx.slots.register({...}, Component))；
+//   3) 界面文案走 ctx.locale.register(ns, {zh, en}) + ctx.locale.bind(ns)（语言切换自动生效）。
+//
+// 槽位注册对象：{ name, id, order, label, locale }；
+// 槽位组件收到的 props 由宿主提供（例如 settings.section 会带上 close）。
+// 纯渲染，无副作用：资源注册全部在 apply 内用 ctx.effect 完成。
 
-import React, { useState } from "react";
+import React from "react";
+
+/** 设置页在「设置」列表中的排序（官方 General=0 / agent-presets=20，皮肤排在后面）。 */
+const SECTION_ORDER = 500;
 
 const ROW = { margin: "10px 0" };
 const LABEL = { display: "block", fontWeight: 600, marginBottom: 4, fontSize: 13 };
-const HINT = { display: "block", color: "#8891a7", fontSize: 12, marginTop: 4 };
+const HINT = { display: "block", color: "var(--dsw-alias-label-secondary)", fontSize: 12, marginTop: 4 };
 const RANGE = { width: "100%", accentColor: "#ff9ec7" };
 const BTN = {
   background: "linear-gradient(135deg,#ff9ec7 0%,#8fb3ff 100%)",
@@ -15,37 +25,53 @@ const BTN = {
   cursor: "pointer", fontWeight: 600, marginRight: 8
 };
 const BTN2 = {
-  background: "transparent", color: "#8891a7", border: "1px solid #c3cbe0",
+  background: "transparent", color: "var(--dsw-alias-label-secondary)",
+  border: "1px solid var(--dsw-alias-border-l2)",
   borderRadius: 8, padding: "6px 14px", cursor: "pointer"
 };
+const DIVIDER = { borderTop: "1px solid var(--dsw-alias-border-l1)", paddingTop: 12, marginTop: 14 };
+const NOTICE = { padding: "8px 10px", borderRadius: 8, fontSize: 12, margin: "6px 0", fontWeight: 600 };
+const THUMB = {
+  width: 84, height: 56, objectFit: "cover", borderRadius: 6, display: "block",
+  border: "2px solid transparent", background: "var(--dsw-alias-bg-layer-2)"
+};
+const THUMB_ACTIVE = { border: "2px solid #ff9ec7", boxShadow: "0 0 0 2px rgba(255,158,199,0.25)" };
+const TILE = { display: "inline-block", margin: "0 8px 8px 0", textAlign: "center", cursor: "pointer", position: "relative", verticalAlign: "top" };
+const TILE_NAME = {
+  display: "block", fontSize: 11, color: "var(--dsw-alias-label-secondary)", maxWidth: 84,
+  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 3, cursor: "pointer"
+};
+const DEL_BTN = {
+  position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%",
+  background: "#d33", color: "#fff", border: "none", cursor: "pointer", fontSize: 12,
+  lineHeight: "16px", padding: 0
+};
+const MINI = {
+  width: 20, height: 18, fontSize: 10, lineHeight: "14px", padding: 0, borderRadius: 4,
+  border: "1px solid var(--dsw-alias-border-l2)", background: "transparent",
+  color: "var(--dsw-alias-label-secondary)", cursor: "pointer", margin: "2px 2px 0 0"
+};
+const MINI_DISABLED = { opacity: 0.35, cursor: "default" };
 
 /**
- * 设置区块组件。
- * @param {{ layer: ReturnType<typeof import('./bg-layer.js').createBgLayer> }} props
+ * 设置页组件。
+ * @param {{ layer: ReturnType<typeof import('./bg-layer.js').createBgLayer>, t: (key: string, params?: Record<string, unknown>) => string }} props
  */
-function BgSettings({ layer }) {
+function BgSettings({ layer, t }) {
   const init = layer.getState();
-  const [pos, setPos] = useState(init.pos);
-  const [size, setSize] = useState(init.size);
-  const [pick, setPick] = useState(init.pick);
-  const [ops, setOps] = useState(Object.assign({}, init.ops));
-  const [uploads, setUploads] = useState(init.uploads || []);
-  const [error, setError] = useState(null);
-  const [okMsg, setOkMsg] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [editName, setEditName] = useState("");
+  const [pos, setPos] = React.useState(init.pos);
+  const [size, setSize] = React.useState(init.size);
+  const [pick, setPick] = React.useState(init.pick);
+  const [ops, setOps] = React.useState(Object.assign({}, init.ops));
+  const [uploads, setUploads] = React.useState(init.uploads || []);
+  const [error, setError] = React.useState(null);
+  const [okMsg, setOkMsg] = React.useState(null);
+  const [editingId, setEditingId] = React.useState(null);
+  const [editName, setEditName] = React.useState("");
   const images = init.images || [];
-  const opEntries = Object.keys(init.ops || {}).map((key) => [key, key]);
+  /** 透明度键（顺序稳定，取自 store 的默认键集合）。 */
+  const opKeys = Object.keys(init.ops || {});
 
-  const NOTICE = { padding: "8px 10px", borderRadius: 8, fontSize: 12, margin: "6px 0", fontWeight: 600 };
-  // 缩略图网格
-  const THUMB = { width: 84, height: 56, objectFit: "cover", borderRadius: 6, display: "block", border: "2px solid transparent", background: "#eef0f7" };
-  const THUMB_ACTIVE = { border: "2px solid #ff9ec7", boxShadow: "0 0 0 2px rgba(255,158,199,0.25)" };
-  const TILE = { display: "inline-block", margin: "0 8px 8px 0", textAlign: "center", cursor: "pointer", position: "relative", verticalAlign: "top" };
-  const TILE_NAME = { display: "block", fontSize: 11, color: "#4a5a86", maxWidth: 84, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 3, cursor: "pointer" };
-  const DEL_BTN = { position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "#d33", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, lineHeight: "16px", padding: 0 };
-  const MINI = { width: 20, height: 18, fontSize: 10, lineHeight: "14px", padding: 0, borderRadius: 4, border: "1px solid #c3cbe0", background: "transparent", color: "#5a6a94", cursor: "pointer", margin: "2px 2px 0 0" };
-  const MINI_DISABLED = { opacity: 0.35, cursor: "default" };
   const refreshFromLayer = () => {
     const s = layer.getState();
     setPos(s.pos); setSize(s.size); setPick(s.pick); setOps(Object.assign({}, s.ops));
@@ -61,6 +87,7 @@ function BgSettings({ layer }) {
     const next = layer.moveUpload(id, dir);
     if (next) setUploads(next);
   };
+
   const tile = (item, isUpload, index, total) => React.createElement("span", {
     key: item.id,
     style: TILE,
@@ -73,7 +100,7 @@ function BgSettings({ layer }) {
       style: Object.assign({}, THUMB, pick === item.id ? THUMB_ACTIVE : {})
     }),
     isUpload ? React.createElement("button", {
-      style: DEL_BTN, title: "删除",
+      style: DEL_BTN, title: "×",
       onClick: (e) => { e.stopPropagation(); layer.removeUpload(item.id).then(refreshFromLayer); }
     }, "×") : null,
     // 名称：点击 ✎ 内联编辑（仅上传图）
@@ -97,12 +124,12 @@ function BgSettings({ layer }) {
     isUpload ? React.createElement("span", { style: { display: "block" } },
       React.createElement("button", {
         style: Object.assign({}, MINI, index === 0 ? MINI_DISABLED : {}),
-        disabled: index === 0, title: "前移",
+        disabled: index === 0, title: "◀",
         onClick: (e) => { e.stopPropagation(); move("up", item.id); }
       }, "◀"),
       React.createElement("button", {
         style: Object.assign({}, MINI, index === total - 1 ? MINI_DISABLED : {}),
-        disabled: index === total - 1, title: "后移",
+        disabled: index === total - 1, title: "▶",
         onClick: (e) => { e.stopPropagation(); move("down", item.id); }
       }, "▶")
     ) : null
@@ -110,33 +137,37 @@ function BgSettings({ layer }) {
 
   return React.createElement("div", null,
     // 操作反馈
-    error ? React.createElement("div", { style: Object.assign({}, NOTICE, { background: "#fdecec", color: "#d33" }) }, "⚠ " + error) : null,
-    okMsg ? React.createElement("div", { style: Object.assign({}, NOTICE, { background: "#eaf7ee", color: "#2e7d46" }) }, "✓ " + okMsg) : null,
+    error ? React.createElement("div", {
+      style: Object.assign({}, NOTICE, { background: "var(--dsw-alias-state-error-primary)", color: "#fff" })
+    }, "⚠ " + error) : null,
+    okMsg ? React.createElement("div", {
+      style: Object.assign({}, NOTICE, { background: "var(--dsw-alias-state-success-primary)", color: "#fff" })
+    }, "✓ " + okMsg) : null,
     React.createElement("div", { style: ROW },
-      React.createElement("label", { style: LABEL }, "背景图位置"),
+      React.createElement("label", { style: LABEL }, t("bg.pos")),
       React.createElement("input", {
         type: "range", min: 0, max: 100, step: 1,
         value: pos, style: RANGE,
         onChange: (e) => { const v = Number(e.target.value); setPos(v); layer.setPos(v); }
       }),
-      React.createElement("span", { style: HINT }, "当前 " + pos + "%（50% = 居中，越小越靠上）")
+      React.createElement("span", { style: HINT }, t("bg.pos.hint", { v: pos }))
     ),
     React.createElement("div", { style: ROW },
-      React.createElement("label", { style: LABEL }, "背景图大小"),
+      React.createElement("label", { style: LABEL }, t("bg.size")),
       React.createElement("input", {
         type: "range", min: 100, max: 300, step: 5,
         value: size, style: RANGE,
         onChange: (e) => { const v = Number(e.target.value); setSize(v); layer.setSize(v); }
       }),
-      React.createElement("span", { style: HINT }, "当前 " + size + "%（100% = 铺满宽度，越大越放大）")
+      React.createElement("span", { style: HINT }, t("bg.size.hint", { v: size }))
     ),
-    // 背景图库：上传图（可预览/选择/删除）+ 内置图（assets 内嵌）
-    React.createElement("div", { style: Object.assign({}, ROW, { borderTop: "1px solid #e3e8f4", paddingTop: 12, marginTop: 14 }) },
-      React.createElement("label", { style: LABEL }, "背景图库"),
-      React.createElement("span", { style: HINT }, "点击缩略图应用；上传的图存于本机浏览器，可随时删除"),
+    // 背景图库：上传图（可预览/选择/删除）+ 内置图（构建期内嵌）
+    React.createElement("div", { style: Object.assign({}, ROW, DIVIDER) },
+      React.createElement("label", { style: LABEL }, t("gallery")),
+      React.createElement("span", { style: HINT }, t("gallery.hint")),
       React.createElement("div", null,
         React.createElement("label", { style: Object.assign({}, BTN, { display: "inline-block", marginBottom: 8 }) },
-          "上传新图",
+          t("upload"),
           React.createElement("input", {
             type: "file", accept: "image/*", style: { display: "none" },
             onChange: (e) => {
@@ -145,36 +176,39 @@ function BgSettings({ layer }) {
               setError(null);
               setOkMsg(null);
               layer.upload(f).then(() => {
-                setOkMsg("已添加并应用该背景图");
+                setOkMsg(t("ok.uploaded"));
                 refreshFromLayer();
               }).catch((err) => {
-                setError(err && err.message ? err.message : "上传失败，请重试（JPG/PNG/WebP 格式）");
+                setError(err && err.message ? err.message : t("err.upload"));
               });
               e.target.value = "";
             }
           })
         ),
-        React.createElement("button", { style: Object.assign({}, BTN2, { marginBottom: 8 }), onClick: () => { layer.reset().then(refreshFromLayer); } }, "恢复默认")
+        React.createElement("button", {
+          style: Object.assign({}, BTN2, { marginBottom: 8 }),
+          onClick: () => { layer.reset().then(refreshFromLayer); }
+        }, t("reset"))
       ),
       // 上传图（带删除/排序/重命名）
       uploads.length > 0 ? React.createElement("div", { style: { marginTop: 4 } },
         uploads.map((u, idx) => tile(u, true, idx, uploads.length))
       ) : null,
-      // 内置图（assets 内嵌）
+      // 内置图（构建期内嵌）
       React.createElement("div", { style: { marginTop: uploads.length > 0 ? 6 : 2 } },
         images.map((img) => tile(img, false))
       )
     ),
     // 各界面透明度（百分比滑块，实时生效 + localStorage 持久化）
-    React.createElement("div", { style: Object.assign({}, ROW, { borderTop: "1px solid #e3e8f4", paddingTop: 12, marginTop: 14 }) },
-      React.createElement("label", { style: LABEL }, "界面透明度"),
-      React.createElement("span", { style: HINT }, "值越大越不透明；0 = 完全透明（透出背景图）"),
-      opEntries.map(([key]) => {
-        const label = OP_LABEL(key);
+    React.createElement("div", { style: Object.assign({}, ROW, DIVIDER) },
+      React.createElement("label", { style: LABEL }, t("opacity")),
+      React.createElement("span", { style: HINT }, t("opacity.hint")),
+      opKeys.map((key) => {
         const v = Math.round((ops[key] ?? 0) * 100);
         return React.createElement("div", { key, style: { margin: "8px 0" } },
-          React.createElement("span", { style: { display: "block", fontSize: 12, color: "#4a5a86", marginBottom: 2 } },
-            label + "：" + v + "%"),
+          React.createElement("span", {
+            style: { display: "block", fontSize: 12, color: "var(--dsw-alias-label-secondary)", marginBottom: 2 }
+          }, t(OP_LABEL_KEY(key)) + "：" + v + "%"),
           React.createElement("input", {
             type: "range", min: 0, max: 100, step: 1, value: v, style: RANGE,
             onChange: (e) => {
@@ -189,53 +223,43 @@ function BgSettings({ layer }) {
   );
 }
 
-/** 透明度键 → 显示名（与 bg-store.js OP_LABELS 一致）。 */
-const OP_LABEL_MAP = { card: "对话主卡片", sidebar: "侧边栏", details: "细节面板", center: "对话内容区", scrim: "背景图遮罩" };
-function OP_LABEL(key) { return OP_LABEL_MAP[key] || key; }
+/** 透明度键 → i18n 文案键（与 bg-store.js OP_LABELS 一致）。 */
+const OP_LABEL_MAP = { card: "op.card", sidebar: "op.sidebar", details: "op.rightbar", center: "op.center", scrim: "op.scrim" };
+function OP_LABEL_KEY(key) { return OP_LABEL_MAP[key] || key; }
 
 /**
- * 注册设置区块到官方设置面板。
- * @param {any} ctx - cordis 上下文；slots 经 ctx.get('slots') 读取（未提供/无 get 则跳过）
+ * 注册设置页到官方设置面板的 settings.section 槽。
+ * @param {any} ctx 客户端 cordis 上下文（inject 保证含 slots / locale）
  * @param {ReturnType<typeof import('./bg-layer.js').createBgLayer>} layer
+ * @param {(key: string, params?: Record<string, unknown>) => string} t 已绑定的界面文案函数
  * @returns {() => void} disposer
  */
-export function registerSettings(ctx, layer) {
-  let dispose = null;
-  let timer = null;
-
-  const tryRegister = () => {
-    let slots;
-    try {
-      slots = typeof ctx.get === "function" ? ctx.get("slots") : undefined;
-    } catch {
-      slots = undefined;
-    }
-    if (!slots || typeof slots.inject !== "function") return false;
-    const disposers = [];
-    slots.inject("settings.section", () => {
-      const d = slots.register(
-        { name: "settings.section", id: "ansk-bg", order: 500, label: () => "爱祥背景" },
-        () => React.createElement(BgSettings, { layer })
-      );
-      if (typeof d === "function") disposers.push(d);
-      return d;
-    });
-    dispose = () => { for (const d of disposers) { try { d(); } catch {} } };
-    return true;
-  };
-
-  // 完整 cordis ctx 才有 get（try-on miniCtx 无 get，直接跳过）。
-  if (typeof ctx.get === "function" && !tryRegister()) {
-    // slots 由 app-shell 提供，可能晚于皮肤激活——轮询等待（最长 ~15s）。
-    let tries = 0;
-    timer = setInterval(() => {
-      tries++;
-      if (tryRegister() || tries >= 75) { clearInterval(timer); timer = null; }
-    }, 200);
+export function registerSettings(ctx, layer, t) {
+  const slots = ctx.slots;
+  if (!slots || typeof slots.inject !== "function" || typeof slots.register !== "function") {
+    // 理论上不会发生（inject 声明了 slots）；失败时不影响皮肤其余部分。
+    ctx.effect(() => () => {}, "ui-skin-ansk: settings unavailable");
+    return () => {};
   }
+  const disposers = [];
+  const disposeInjection = slots.inject("settings.section", () => {
+    const d = slots.register(
+      {
+        name: "settings.section",
+        id: "ansk-bg",
+        order: SECTION_ORDER,
+        label: () => t("nav"),
+        locale: "ansk"
+      },
+      () => React.createElement(BgSettings, { layer, t })
+    );
+    if (typeof d === "function") disposers.push(d);
+    return d;
+  });
+  if (typeof disposeInjection === "function") disposers.push(disposeInjection);
 
   return () => {
-    if (timer !== null) clearInterval(timer);
-    if (dispose !== null) dispose();
+    for (const d of disposers) { try { d(); } catch {} }
+    disposers.length = 0;
   };
 }

@@ -1,4 +1,5 @@
-// 爱祥 — 背景设置持久化：localStorage（位置/大小）+ IndexedDB（上传图 data URL）。
+// 爱祥 — 背景设置持久化：localStorage（位置/大小/透明度/选择）+ IndexedDB（上传图 data URL）。
+// 存储键统一 ansk.* 前缀；IndexedDB 库名 ansk-skin。
 
 const POS_KEY = "ansk.bg.pos";
 const SIZE_KEY = "ansk.bg.size";
@@ -11,13 +12,13 @@ const IDB_LEGACY_UPLOAD_KEY = "upload";
 
 /** 各界面透明度默认值（与 skin.css.js 的 var() fallback 一致）。 */
 export const DEFAULT_OPS = { card: 0.42, sidebar: 0.55, details: 0.55, center: 0.4, scrim: 0.35 };
-/** 透明度键的显示名与顺序。 */
+/** 透明度键的 i18n 文案键与顺序（右栏在现版 GUI 里是 rightbar）。 */
 export const OP_LABELS = [
-  ["card", "对话主卡片"],
-  ["sidebar", "侧边栏"],
-  ["details", "细节面板"],
-  ["center", "对话内容区"],
-  ["scrim", "背景图遮罩"]
+  ["card", "op.card"],
+  ["sidebar", "op.sidebar"],
+  ["details", "op.rightbar"],
+  ["center", "op.center"],
+  ["scrim", "op.scrim"]
 ];
 
 /** 读取数字设置（带默认值，非法/越界回退默认）。 */
@@ -63,7 +64,9 @@ export function writeOps(ops) { localStorage.setItem(OPS_KEY, JSON.stringify(ops
 function idbOpen() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(IDB_STORE)) req.result.createObjectStore(IDB_STORE);
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });

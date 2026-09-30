@@ -1,9 +1,58 @@
-// 爱祥 (Anon × Sakiko) — 样式（CSS-in-JS 字符串，作用域 body[data-dsh-ansk]）。
-// 亮/暗双套：暗色选择器 body[data-dsh-ansk][data-ds-dark-theme]（官方 theme 服务设置的属性）。
+// 爱祥 (Anon × Sakiko) — 样式（CSS-in-JS 字符串，作用域 body[data-dsh-ansk] / html[data-dsh-ansk]）。
+// 亮/暗双套：暗色选择器 [data-ds-dark-theme]（官方 theme 服务设置的属性）。
+//
+// 锚点选择器说明（CSS Modules 类名是「哈希_局部名」，哈希跨构建会变、后缀稳定）：
+//   [class$='_frame']        AppFrame 三列网格（现版 GUI）
+//   [class$='_sidebarCol']   侧边栏列
+//   [class$='_rightbarCol']  右栏（现版 GUI 叫 rightbar，旧版叫 detailsCol）
+//   [class$='_centerCol']    对话中列
+//   #root                应用挂载点（#root，现版基线只有 height:100%;margin:0）
+// 注意：绝不给含 fixed 后代的容器加 backdrop-filter（会把 fixed 包含块改绑到该容器）。
 
 export const SKIN_CSS = [
-  // ---------- 全局底色：粉蓝撞色渐变（亮）。背景插画在独立图层 .anskBg
+  // ---------- 文档根 + 全局底色：粉蓝撞色渐变（亮）。背景插画在独立图层 .anskBg
   // （z-index:-1），经 CSS 变量控制位置/大小/图源，设置面板可调。 ----------
+  // 皮肤 chrome 尺寸集中在这里（挂在 html 上），避免各处散落魔数：
+  //   --ansk-titlebar-h  标题栏高度（macOS 用 36px，让文字与红黄绿灯同一水平线）
+  //   --ansk-statusbar-h 状态栏高度
+  //   --ansk-chrome-h    两者之和（#root 算高度用）
+  //   --ansk-tl-pad      标题栏左侧留白（macOS 必须让开红黄绿灯，约 78px）
+  // 这些变量必须挂在 html 上并排在平台覆盖之前：body[data-dsh-ansk]{…} 与
+  // html[data-platform='darwin'][data-dsh-ansk]{…} 同为 (0,2,0)，先出现者会被后者按
+  // 源码顺序覆盖；若把默认值留在 body 块里（它排在文件后面），darwin 覆盖会被反向吃掉。
+  "html[data-dsh-ansk]{",
+  "--ansk-titlebar-h:30px;",
+  "--ansk-statusbar-h:24px;",
+  "--ansk-chrome-h:54px;",
+  "--ansk-tl-pad:6px;",
+  "background:transparent;",
+  "}",
+  // 给固定标题栏/状态栏让位（标题栏在上、状态栏在下）。
+  "html[data-dsh-ansk] body{",
+  "padding:var(--ansk-chrome-top,30px) 0 var(--ansk-statusbar-h) !important;",
+  "}",
+  // ---------- macOS（Electron 原生窗口）适配 ----------
+  // 红黄绿灯是系统绘制的窗口按钮，固定在窗口左上角：标题栏内容必须整体右移让开，
+  // 装饰用的「— □ ×」也要撤掉（真按钮就在旁边，再画三个假的是双重窗口按钮）。
+  "html[data-platform='darwin'][data-dsh-ansk]{",
+  "--ansk-chrome-top:36px;",
+  "--ansk-titlebar-h:36px;",
+  "--ansk-chrome-h:60px;",
+  "--ansk-tl-pad:78px;",
+  "}",
+  "html[data-platform='darwin'][data-dsh-ansk] .anskTitlebarBtn{",
+  "display:none;",
+  "}",
+  // 全屏（无红黄绿灯）时标题栏回到 30px、装饰按钮放回来、左侧留白收窄。
+  "html[data-platform='darwin'][data-fullscreen][data-dsh-ansk]{",
+  "--ansk-chrome-top:30px;",
+  "--ansk-titlebar-h:30px;",
+  "--ansk-chrome-h:54px;",
+  "--ansk-tl-pad:6px;",
+  "}",
+  "html[data-platform='darwin'][data-fullscreen][data-dsh-ansk] .anskTitlebarBtn{",
+  "display:inline-flex;",
+  "}",
   "body[data-dsh-ansk]{",
   "--ansk-pink:#ff9ec7;",
   "--ansk-pink-soft:#ffd3e4;",
@@ -19,7 +68,7 @@ export const SKIN_CSS = [
   "radial-gradient(120% 90% at 10% 110%,rgba(111,168,255,0.5) 0%,rgba(111,168,255,0) 55%),",
   "linear-gradient(160deg,#ffeef5 0%,#f6f1ff 45%,#eaf2ff 100%);",
   "background-attachment:fixed;",
-  "padding:30px 10px 26px;",
+  "padding:var(--ansk-chrome-top,30px) 10px var(--ansk-statusbar-h);",
   "}",
   // ---------- 全局底色（暗） ----------
   "body[data-dsh-ansk][data-ds-dark-theme]{",
@@ -54,14 +103,22 @@ export const SKIN_CSS = [
   "}",
   // ---------- 对话主区：半透明卡片（不使用 backdrop-filter：它会把 fixed 后代
   // （设置面板/弹层）的包含块从视口拽到卡片上，导致全视口面板错位） ----------
-  "body[data-dsh-ansk] [id=root]{",
+  // 现版基线：#root{height:100%;margin:0}，AppFrame 铺满视口；皮肤把它收成一条卡片，
+  // 上下留出固定标题栏/状态栏的高度。
+  // 坑：必须写 `#root`（真 ID 选择器），不能写 `[id=root]`——后者是【属性选择器】，
+  // 特异性只有 (0,2,1)，会被框架基线的 `#root`(1,0,0) 按特异性压掉，height 根本不生效
+  // （症状：卡片只有内容高度、底部与状态栏错位）。
+  "body[data-dsh-ansk] #root{",
   "box-sizing:border-box;",
+  "height:calc(100vh - var(--ansk-chrome-h));",
+  "margin:0 10px; /* 竖直方向不加外边距：卡片底边必须正好落在状态栏顶边 */",
   "background:rgba(255,255,255,var(--ansk-op-card,0.42));",
   "border:1px solid rgba(111,168,255,0.45);",
   "border-radius:14px;",
   "box-shadow:0 10px 34px rgba(63,125,242,0.18);",
+  "overflow:hidden;",
   "}",
-  "body[data-dsh-ansk][data-ds-dark-theme] [id=root]{",
+  "body[data-dsh-ansk][data-ds-dark-theme] #root{",
   "background:rgba(20,26,43,var(--ansk-op-card,0.48));",
   "border-color:rgba(111,168,255,0.35);",
   "box-shadow:0 10px 34px rgba(0,0,0,0.45);",
@@ -69,9 +126,11 @@ export const SKIN_CSS = [
   // ---------- 标题栏 ----------
   "body[data-dsh-ansk] .anskTitlebar{",
   "position:fixed;top:0;left:0;right:0;z-index:1000000;",
-  "height:30px;display:flex;align-items:center;gap:6px;padding:0 6px;",
+  "box-sizing:border-box;",
+  "height:var(--ansk-titlebar-h);display:flex;align-items:center;gap:6px;",
+  "padding:0 8px 0 var(--ansk-tl-pad);",
   "color:#fff;user-select:none;",
-  "font:700 12px/30px 'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;",
+  "font:700 12px/var(--ansk-titlebar-h) 'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;",
   "background:linear-gradient(90deg,#ff9ec7 0%,#ffb6d8 40%,#8fb3ff 85%,#6fa8ff 100%);",
   "border-bottom:1px solid rgba(63,125,242,0.55);",
   "box-shadow:inset 0 1px rgba(255,255,255,0.5),0 2px 10px rgba(63,125,242,0.22);",
@@ -97,9 +156,10 @@ export const SKIN_CSS = [
   // ---------- 状态栏 ----------
   "body[data-dsh-ansk] .anskStatusbar{",
   "position:fixed;bottom:0;left:0;right:0;z-index:1000000;",
-  "height:24px;display:flex;align-items:stretch;",
+  "box-sizing:border-box;",
+  "height:var(--ansk-statusbar-h);display:flex;align-items:stretch;",
   "color:#5a6a94;user-select:none;",
-  "font:11px/24px 'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;",
+  "font:11px/var(--ansk-statusbar-h) 'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;",
   "background:rgba(255,255,255,0.72);border-top:1px solid rgba(111,168,255,0.4);",
   "backdrop-filter:blur(10px);",
   "-webkit-backdrop-filter:blur(10px);",
@@ -121,7 +181,7 @@ export const SKIN_CSS = [
   // ---------- 细节 ----------
   "body[data-dsh-ansk] ::selection{background:#ff9ec7;color:#fff;}",
   "body[data-dsh-ansk][data-ds-dark-theme] ::selection{background:#6fa8ff;color:#fff;}",
-  "body[data-dsh-ansk] .anskTitlebarBtn:focus-visible,body[data-dsh-ansk] [data-skin-chrome='titlebar']:focus-visible{outline:none;box-shadow:inset 0 0 0 2px #fff;}",
+  "body[data-dsh-ansk] .anskTitlebarBtn:focus-visible,body[data-dsh-ansk] [data-dsh-skin-chrome='titlebar']:focus-visible{outline:none;box-shadow:inset 0 0 0 2px #fff;}",
   "@media (prefers-reduced-motion:reduce){body[data-dsh-ansk] *{transition:none!important;}}",
   "body[data-dsh-ansk] .anskTitlebarBtn{transition:background .12s,box-shadow .12s;}",
   // ---------- 侧边栏列：粉蓝氛围渐变（不使用 backdrop-filter：设置面板是
@@ -232,19 +292,19 @@ export const SKIN_CSS = [
   // ---------- footer 设置触发器 ----------
   "body[data-dsh-ansk] [class$='_sidebarCol'] [class$='_trigger']:hover{background:rgba(255,158,199,0.14);}",
   // ---------- 细节面板：半透明 + 粉蓝边框（同上，不用 backdrop-filter） ----------
-  "body[data-dsh-ansk] [class$='_detailsCol']{",
+  "body[data-dsh-ansk] [class$='_rightbarCol']{",
   "background:rgba(255,255,255,var(--ansk-op-details,0.55));",
   "border-left:1px solid rgba(111,168,255,0.35);",
   "}",
-  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_detailsCol']{",
+  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_rightbarCol']{",
   "background:rgba(20,26,43,var(--ansk-op-details,0.5));",
   "border-left-color:rgba(111,168,255,0.2);",
   "}",
-  "body[data-dsh-ansk] [class$='_detailsCol'] [class$='_header']{",
+  "body[data-dsh-ansk] [class$='_rightbarCol'] [class$='_header']{",
   "background:linear-gradient(90deg,rgba(255,158,199,0.16),rgba(111,168,255,0.16));",
   "border-bottom:1px solid rgba(111,168,255,0.3);",
   "}",
-  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_detailsCol'] [class$='_header']{",
+  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_rightbarCol'] [class$='_header']{",
   "background:linear-gradient(90deg,rgba(255,158,199,0.1),rgba(111,168,255,0.1));",
   "border-bottom-color:rgba(111,168,255,0.2);",
   "}",
@@ -273,14 +333,14 @@ export const SKIN_CSS = [
   "body[data-dsh-ansk][data-ds-dark-theme] [class$='_sidebarCol'] [class$='_root']{",
   "background:rgba(20,26,43,var(--ansk-op-sidebar,0.42));",
   "}",
-  "body[data-dsh-ansk] [class$='_detailsCol'] [class$='_root']{",
+  "body[data-dsh-ansk] [class$='_rightbarCol'] [class$='_root']{",
   "background:rgba(255,255,255,var(--ansk-op-details,0.4));",
   "}",
-  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_detailsCol'] [class$='_root']{",
+  "body[data-dsh-ansk][data-ds-dark-theme] [class$='_rightbarCol'] [class$='_root']{",
   "background:rgba(20,26,43,var(--ansk-op-details,0.5));",
   "}",
   ""
 ].join("\n");
 
 /** <style data-plugin-css> 的标签 id（去重键，仿官方 bundle）。 */
-export const CSS_TAG = "@linxin666/dsh-client-ui-skin-ansk/ansk.module.css";
+export const CSS_TAG = "ansk-skin/ansk.module.css";

@@ -1,0 +1,4 @@
+# ansk 皮肤组合包 patch：插入本包的一行（host 入口是空实现，渲染全在 client.js）。
+- insert:
+    - id: ui-skin-ansk
+      name: 'ansk-skin'

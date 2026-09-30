@@ -1,27 +1,57 @@
-// 爱祥 皮肤构建脚本（node build.mjs，需先 npm i -D esbuild）。
-// 产出 dist/ 组装皮肤包：
-//   dist/package.json  dist/skin.json  dist/cordis.patch.yml
-//   dist/lib/index.js   dist/lib/client.js
-// client.js 协议：window.__ModuleLoader__.load({ id, factory: (require) => {...; return module.exports; } })
-// （对照官方 bundle 头尾逐字复刻；esbuild cjs 输出直接作为 factory 体）。
-// 后补图片路径：assets/ 下存在 bg.jpg 时自动 base64 内嵌（本期无图则跳过）。
+// 爱祥 皮肤构建脚本（node build.mjs）。
+//
+// 本仓库根目录【就是】DSH Desktop 的组合包（bundle package）：
+//   package.json      包清单：dsh.bundle.patch（组合包声明）+ dsh.client（浏览器侧声明）
+//   cordis.patch.yml  bundle patch：insert 插件行
+//   index.js          host 侧入口（ESM，apply 空实现——纯浏览器皮肤）
+//   client.js         浏览器侧产物（window.__ModuleLoader__.load 协议，构建生成）
+//   icon.svg          plugin_manager / 设置页卡片图标
+//   locale/{zh,en}.json  卡片标题与描述（宿主不激活插件即可读）
+//
+// 构建只生成 client.js（可选 cordis.patch.yml / index.js），其余文件是仓库里的源文件。
+//
+// 用法：
+//   node build.mjs                构建（保留 bundle patch）
+//   node build.mjs --bump         版本 patch +1 后构建（重装驱动重新加载用）
+//   node build.mjs --version=0.3.0
+//   node build.mjs --no-patch     不生成 cordis.patch.yml 并去掉包清单里的 dsh.bundle
+//                                 （仅用于「只能替换已加载模块、无法重启」的调试安装）
+//
+// 参考实现：官方 @deepseek-ai/dsh-client-ui-* 的 lib/client.js 形态，
+// 以及 dsh-agent-preset 的 cordis-plugin-development skill（templates/decoration 四件套）。
+//
+// 背景图：assets/ 下所有 .jpg/.jpeg/.png/.webp 自动 base64 内嵌为图库
+// （中文名支持，bg 排第一；bg-dark.* 与 raw/ 子目录除外）。
 
 import { build } from "esbuild";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const DIST = join(ROOT, "dist");
 const TMP = join(ROOT, ".tmp-client.cjs");
 const ASSETS = join(ROOT, "assets");
 const GENERATED = join(ROOT, "src/generated");
+const PACKAGE_JSON = join(ROOT, "package.json");
 
-const PACKAGE = "@linxin666/dsh-client-ui-skin-ansk";
-const VERSION = "0.1.0";
+/** 包名（客户端模块 id / patch 行 name / CSS 去重键统一用它）。 */
+const PACKAGE = "ansk-skin";
+const ROW_ID = "ui-skin-ansk";
 const ID = "ansk";
-const WIRING_ID = "ui-skin-ansk";
 const BODY_ATTR = "data-dsh-ansk";
+
+const NO_PATCH = process.argv.includes("--no-patch");
+
+// ---------- 版本 ----------
+const rootPkg = JSON.parse(readFileSync(PACKAGE_JSON, "utf8"));
+const versionArg = process.argv.find((a) => a.startsWith("--version="));
+let VERSION = versionArg ? versionArg.slice("--version=".length) : rootPkg.version || "0.1.0";
+if (process.argv.includes("--bump")) {
+  const parts = VERSION.split(".");
+  parts[2] = String(Number(parts[2] || 0) + 1);
+  VERSION = parts.join(".");
+}
+if (!/^\d+\.\d+\.\d+/.test(VERSION)) throw new Error(`bad version: ${VERSION}`);
 
 /** 从 assets/ 读取全部图片 → 图库数组 [{ id, name, dataUrl }]。
  *  规则：assets/ 下所有 .jpg/.jpeg/.png/.webp 都内嵌（含中文名；bg.jpg 作为默认第一张；
@@ -30,7 +60,10 @@ const BODY_ATTR = "data-dsh-ansk";
 function scanAssets() {
   const out = [];
   const seen = new Set();
+  if (!existsSync(ASSETS)) return out;
   for (const entry of readdirSync(ASSETS)) {
+    const full = join(ASSETS, entry);
+    if (!statSync(full).isFile()) continue;
     const m = /^(.+)\.(jpe?g|png|webp)$/i.exec(entry);
     if (!m || m[1].trim().toLowerCase().startsWith("bg-dark")) continue;
     const id = m[1].trim();
@@ -38,15 +71,14 @@ function scanAssets() {
     seen.add(id);
     const ext = m[2].toLowerCase();
     const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "png" ? "image/png" : "image/webp";
-    const b64 = readFileSync(join(ASSETS, entry)).toString("base64");
+    const b64 = readFileSync(full).toString("base64");
     out.push({ id, name: id === "bg" ? "默认背景" : id, dataUrl: `data:${mime};base64,${b64}` });
   }
-  // bg 优先作默认
   out.sort((a, b) => (a.id === "bg" ? -1 : b.id === "bg" ? 1 : a.id < b.id ? -1 : 1));
   return out;
 }
 
-// ---------- 0. 生成 src/generated/bg.js（在 esbuild 之前，client 源码 import 它） ----------
+// ---------- 0. 生成 src/generated/bg.js（esbuild 之前，client 源码 import 它） ----------
 mkdirSync(GENERATED, { recursive: true });
 const BG_IMAGES = scanAssets();
 const BG_IMAGE = BG_IMAGES[0]?.dataUrl ?? null;
@@ -62,10 +94,11 @@ writeFileSync(
 );
 if (BG_IMAGES.length) {
   const totalKb = Math.round(BG_IMAGES.reduce((s, i) => s + i.dataUrl.length, 0) / 1024);
-  console.log(`[ansk-skin] background gallery: ${BG_IMAGES.length} image(s), ${totalKb} KB total`);
+  console.log(`[ansk-skin] background gallery: ${BG_IMAGES.length} image(s), ${totalKb} KB total (embedded)`);
 } else {
   console.log("[ansk-skin] no background image (assets/bg.jpg absent) — pure gradient look");
 }
+
 
 // ---------- 1. esbuild 打包 src/client/index.js → cjs ----------
 await build({
@@ -78,105 +111,96 @@ await build({
   minify: false,
   legalComments: "none",
   logLevel: "warning",
-  // React 由运行时模块系统提供（与官方皮肤一致），勿内联。
+  // src/client/index.js 以 `module.exports = {...}` 收尾（官方 client.js 同形：exports
+  // 只能是普通数据属性，不能是 esbuild 的 __toCommonJS getter 形态）。因为同一文件里还
+  // import 了其它模块，esbuild 认为它可能是 ESM，会对该赋值发 commonjs-variable-in-esm
+  // 警告——本项目中是误报（产物实测包含 module.exports），显式静音；构建末尾另有断言。
+  logOverride: { "commonjs-variable-in-esm": "silent" },
+  // react / react/jsx-runtime 由客户端 seed 模块表提供（client-modules 的 staticModules），
+  // 与官方 @deepseek-ai/dsh-client-ui-* 包一致：绝不内联第二份 React。
   external: ["react", "react/jsx-runtime"]
 });
 
-// ---------- 2. 协议包装 ----------
+// ---------- 2. 协议包装（与官方 client.js 同形） ----------
 const body = readFileSync(TMP, "utf8").trim();
-const header = [
+// 断言：exports 必须是「module.exports = {...}」这一个普通数据属性形态。
+// esbuild 若因 ESM 判定丢弃该赋值（或改成 __toCommonJS getter 形态），cordis 加载器
+// 会静默不调用 apply —— 皮肤「装了但没反应」。这里让它在构建期就失败。
+if (!/module\.exports\s*=\s*\{\s*apply\s*,\s*inject\s*\}/.test(body)) {
+  throw new Error(
+    "client bundle lost its `module.exports = { apply, inject }` assignment — " +
+    "the cordis loader would materialize the module without ever calling apply. " +
+    "Check src/client/index.js: keep the CJS tail and avoid `export` in the entry."
+  );
+}
+const clientJs = [
   "window.__ModuleLoader__.load({",
   `\tid: ${JSON.stringify(PACKAGE)},`,
   "\tfactory: (require) => {",
   "\t\tvar module = { exports: {} };",
   "\t\tvar exports = module.exports;",
   "\t\tObject.defineProperty(exports, Symbol.toStringTag, { value: \"Module\" });",
-  ""
-].join("\n");
-const footer = [
+  "",
+  body,
   "",
   "\t\treturn module.exports;",
   "\t}",
   "});",
   ""
 ].join("\n");
-const clientJs = header + body + footer;
 
-// ---------- 4. 写 dist ----------
-mkdirSync(join(DIST, "lib"), { recursive: true });
+// ---------- 3. 写产物 ----------
+writeFileSync(join(ROOT, "client.js"), clientJs, "utf8");
 
-// lib/index.js — host 侧 no-op（ESM，与官方皮肤一致）
-writeFileSync(
-  join(DIST, "lib/index.js"),
-  "// Host loader entry for the browser-only skin plugin (provides no host-side behavior).\nfunction apply() {}\nexport { apply };\n",
-  "utf8"
-);
+// host 侧入口：皮肤没有宿主侧行为，但组合包必须有一个可加载的 row 模块。
+if (!existsSync(join(ROOT, "index.js"))) {
+  writeFileSync(
+    join(ROOT, "index.js"),
+    "/** 爱祥皮肤 host 侧入口：纯浏览器皮肤，宿主侧无行为。 */\nexport function apply() {}\n",
+    "utf8"
+  );
+}
 
-// lib/client.js
-writeFileSync(join(DIST, "lib/client.js"), clientJs, "utf8");
+// bundle patch：把插件行插进当前 profile 的组合
+if (NO_PATCH) {
+  rmSync(join(ROOT, "cordis.patch.yml"), { force: true });
+} else {
+  writeFileSync(
+    join(ROOT, "cordis.patch.yml"),
+    [
+      `# ${ID} 皮肤组合包 patch：插入本包的一行（host 入口是空实现，渲染全在 client.js）。`,
+      "- insert:",
+      `    - id: ${ROW_ID}`,
+      `      name: '${PACKAGE}'`,
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+}
 
-// package.json
-const packageJson = {
-  name: PACKAGE,
-  version: VERSION,
-  description: "爱祥 (Anon × Sakiko, BanG Dream! It's MyGO!!!!!) theme skin for dsh web GUI.",
-  type: "module",
-  main: "lib/index.js",
-  exports: {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
-    "./package.json": "./package.json"
-  },
-  dsh: {
-    bundle: { patch: "./cordis.patch.yml" },
-    // inject slots：设置面板「爱祥背景」区块依赖 ctx.slots；try-on miniCtx 无 slots 时皮肤已防御。
-    client: { inject: ["slots"], platform: "web" }
-  },
-  license: "MIT",
-  files: ["lib", "skin.json", "cordis.patch.yml"]
-};
-writeFileSync(join(DIST, "package.json"), JSON.stringify(packageJson, null, 2) + "\n", "utf8");
-
-// skin.json — 注册表元数据（host 侧运行时扫描的单一真相）
-const skinJson = {
-  id: ID,
-  name: "爱祥",
-  nameEn: "Anon × Sakiko",
-  author: "watakushi",
-  tagline: "粉蓝星轨 · 吉他 × 钢琴 · 爱音 × 祥子",
-  description:
-    "以《BanG Dream! It's MyGO!!!!!》千早爱音 × 豊川祥子为灵感的主题皮肤：粉色与蓝色撞色渐变贯穿全局，音符与星星点缀在毛玻璃面板之间，标题栏与状态栏带有吉他 × 钢琴徽标——沉浸式少女乐队氛围。",
-  tags: ["ansk", "aixiang", "mygo", "band", "pink", "blue", "music"],
-  accent: "#6fa8ff",
-  bodyAttr: BODY_ATTR,
-  package: PACKAGE,
-  wiring: {
-    id: WIRING_ID,
-    bundleWired: false
-  },
-  preview: {
-    light: "packages/skins/ansk/preview/light.png",
-    dark: "packages/skins/ansk/preview/dark.png"
-  },
-  order: 99
-};
-writeFileSync(join(DIST, "skin.json"), JSON.stringify(skinJson, null, 2) + "\n", "utf8");
-
-// cordis.patch.yml — bundle 安装路径的 insert 行（本方案走 home patch insert，此文件惰性保留）
-const patchYml = [
-  `# ${ID} skin bundle patch: inserts its dsh.client row into the web plugin roster.`,
-  "- insert:",
-  `    - id: ${WIRING_ID}`,
-  `      name: '${PACKAGE}'`,
-  ""
-].join("\n");
-writeFileSync(join(DIST, "cordis.patch.yml"), patchYml, "utf8");
+// 包清单：版本 + （--no-patch 时）去掉 dsh.bundle 与 files 里的 patch 引用
+const next = { ...rootPkg, version: VERSION };
+if (NO_PATCH) {
+  const { bundle: _drop, ...restDsh } = next.dsh ?? {};
+  if (Object.keys(restDsh).length > 0) next.dsh = restDsh;
+  else delete next.dsh;
+  next.files = (next.files ?? []).filter((f) => f !== "cordis.patch.yml");
+} else {
+  next.dsh = { ...(next.dsh ?? {}), bundle: { patch: "./cordis.patch.yml" } };
+  if (!(next.files ?? []).includes("cordis.patch.yml")) next.files = [...(next.files ?? []), "cordis.patch.yml"];
+}
+writeFileSync(PACKAGE_JSON, JSON.stringify(next, null, 2) + "\n", "utf8");
 
 // 清理
-try { writeFileSync(TMP, "", "utf8"); } catch {}
+try { writeFileSync(TMP, "", "utf8"); rmSync(TMP, { force: true }); } catch {}
+// 外置卷（exFAT）上写入文件会伴随生成 AppleDouble 元数据 `._*`，清掉避免随包进 profile。
+for (const entry of readdirSync(ROOT)) {
+  if (entry.startsWith("._")) rmSync(join(ROOT, entry), { force: true });
+}
 
-console.log("[ansk-skin] built:");
-console.log("  dist/lib/client.js  ", (await import("node:fs")).statSync(join(DIST, "lib/client.js")).size, "bytes");
-console.log("  dist/skin.json      OK");
-console.log("  dist/package.json   OK");
-console.log("  dist/cordis.patch.yml OK");
+const kb = (p) => Math.round(statSync(p).size / 1024);
+console.log(`[ansk-skin] built v${VERSION} → 仓库根目录即组合包`);
+console.log(`  package.json      ${PACKAGE}${NO_PATCH ? "  (--no-patch：无 dsh.bundle)" : `  bundle patch ${ROW_ID}`}`);
+console.log(`  client.js         ${kb(join(ROOT, "client.js"))} KB (browser entry)`);
+console.log(`  icon.svg          ${existsSync(join(ROOT, "icon.svg")) ? "OK" : "缺失（卡片无图）"}`);
+console.log(`[ansk-skin] install: plugin_manager install_bundle target="${ROOT}"`);
